@@ -34,6 +34,7 @@ if(OSPRAY_SG_VTK)
   set(SG_VTK_SRCS
     importer/importUnstructuredVolume.cpp
     importer/importVTKPolyData.cpp
+    importer/importVTI.cpp
     generator/generateVTKWaveletVolume.cpp
   )
 
@@ -72,9 +73,10 @@ ospray_create_library(ospray_sg SHARED
   SceneGraph.cpp
   Renderer.cpp
 
-  geometry/Geometry.cpp
-  geometry/Spheres.cpp
   geometry/Cylinders.cpp
+  geometry/Geometry.cpp
+  geometry/Slices.cpp
+  geometry/Spheres.cpp
   geometry/StreamLines.cpp
   geometry/TriangleMesh.cpp
 
@@ -114,10 +116,13 @@ ospray_create_library(ospray_sg SHARED
   3rdParty/ply.cpp
 
   # scene graph generators
+  generator/Generator.cpp
   generator/generateBasicVolume.cpp
+  generator/generateCurves.cpp
+  generator/generateCylinders.cpp
   generator/generateGridOfSpheres.cpp
   generator/generateRandomSpheres.cpp
-  generator/Generator.cpp
+  generator/generateUnstructuredVolume.cpp
 
   # scene graph importers
   importer/Importer.cpp

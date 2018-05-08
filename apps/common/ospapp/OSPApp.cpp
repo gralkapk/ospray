@@ -99,6 +99,12 @@ general app-parameters:
         window height
     --size [int] [int]
         window width height
+    -hd
+        alias for window size = 1920x1080
+    -4k
+        alias for window size = 3840x2160
+    -8k
+        alias for window size = 7680x4320
     -vp [float] [float] [float]
         camera position xyz
     -vu [float] [float] [float]
@@ -120,7 +126,7 @@ usage --> "--generate:type[:parameter1=value,parameter2=value,...]"
 
     types:
 
-      randomSpheres --> generate a block of random sphere centers of uniform radius
+      spheres --> generate a block of random sphere centers of uniform radius
           parameters:
               numSpheres=[int]
                   number of spheres to generate
@@ -131,6 +137,13 @@ usage --> "--generate:type[:parameter1=value,parameter2=value,...]"
           parameters:
               [dimensions,dims]=[intxintxint]
                   number of spheres to generate in each 3D dimension
+
+      cylinders --> generate a block of cylinders in {X,Y} grid of length Z
+          parameters:
+              [dimensions,dims]=[intxintxint]
+                  number of cylinders to generate in X,Y 2D dimensions, use Z for length
+              radius=[float]
+                  radius of cylinders
 
       basicVolume --> generate a volume with linearly increasing voxel values
           parameters:
@@ -143,6 +156,8 @@ usage --> "--generate:type[:parameter1=value,parameter2=value,...]"
                   number of spheres to generate in each 3D dimension
               [isovalues,isosurfaces]=[value1/value2/value3...]
                   use vtkMarchingCubes filter to generate isosurfaces instead of the volume
+              viewSlice
+                  add a slice to the middle of the volume in the X/Y plane
 )text"
       << std::endl;
     }
@@ -202,6 +217,9 @@ usage --> "--generate:type[:parameter1=value,parameter2=value,...]"
         renderer.traverse(sg::PrintNodes{});
 
       render(rendererPtr);
+
+      rendererPtr.reset();
+      ospShutdown();
 
       return 0;
     }
@@ -306,6 +324,15 @@ usage --> "--generate:type[:parameter1=value,parameter2=value,...]"
           height = atoi(av[i + 2]);
           removeArgs(ac, av, i, 3);
           --i;
+        } else if (arg == "-hd") {
+          width  = 1920;
+          height = 1080;
+        } else if (arg == "-4k") {
+          width  = 3840;
+          height = 2160;
+        } else if (arg == "-8k") {
+          width  = 7680;
+          height = 4320;
         } else if (arg == "-vp") {
           vec3f posVec;
           posVec.x = atof(av[i + 1]);
@@ -649,6 +676,13 @@ usage --> "--generate:type[:parameter1=value,parameter2=value,...]"
         camera["apertureRadius"] = apertureRadius.getValue();
       if (camera.hasChild("focusdistance"))
         camera["focusdistance"] = length(pos.getValue() - gaze.getValue());
+
+      // orthographic camera adjustments
+      if (camera.hasChild("height"))
+        camera["height"] = (float)height;
+      if (camera.hasChild("aspect"))
+        camera["aspect"] = width / (float)height;
+
       renderer.verify();
       renderer.commit();
     }
