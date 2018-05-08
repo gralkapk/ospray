@@ -37,6 +37,9 @@
 #include "gensv/generateSciVis.h"
 #include "arcball.h"
 
+// mmpld
+#include "mmpld.h"
+
 /* This app demonstrates how to write an distributed scivis style
  * interactive renderer using the distributed MPI device. Note that because
  * OSPRay uses sort-last compositing it is up to the user to ensure
@@ -149,6 +152,81 @@ void charCallback(GLFWwindow *, unsigned int c) {
     io.AddInputCharacter((unsigned short)c);
   }
 }
+
+
+// MMPLD reader
+std::vector<uint8_t> readMMPLDFile(char const* filename, float bbox[6], mmpld::list_header& header) {
+  auto hFile = fopen(filename, "rb");
+
+  if (hFile != nullptr) {
+    mmpld::file_header fileHeader;
+    mmpld::seek_table seekTable;
+    mmpld::frame_header frameHeader;
+    mmpld::list_header listHeader;
+
+    std::vector<uint8_t> particles;
+
+    mmpld::read_file_header(hFile, fileHeader, seekTable);
+
+    if (fileHeader.frames > 1) {
+      std::cout << "Info: Dynamic datasets are currently not supported for MMPLD files" << std::endl;
+    }
+
+    if (fileHeader.frames == 0) {
+      fclose(hFile);
+      char buf[1024];
+      sprintf(buf, "Error: MMPLD file: %s contains no frames\n", filename);
+      throw std::runtime_error(buf);
+    }
+
+    // get jumppoint to first frame
+    auto const offset = seekTable[0];
+
+    if (!fseek(hFile, offset, SEEK_SET)) {
+      fclose(hFile);
+      char buf[1024];
+      sprintf(buf, "Error: Failed to jump to first frame in MMPLD file: %s\n", filename);
+      throw std::runtime_error(buf);
+    }
+
+    mmpld::read_frame_header(hFile, fileHeader.version, frameHeader);
+
+    if (frameHeader.lists > 1) {
+      std::cout << "Info: More than one particle lists are currently not supported for MMPLD files" << std::endl;
+    }
+
+    size_t buffer_size = 0;
+
+    mmpld::read_list_header(hFile, listHeader);
+
+    // bytes required in total for all particles
+    auto rem = mmpld::get_size<size_t>(listHeader);
+
+    particles.resize(rem);
+
+    auto ptr = particles.data();
+
+    while (rem > 0) {
+      auto const cnt = fread(ptr, 1, rem, hFile);
+      ptr += cnt;
+      rem -= cnt;
+    }
+
+    fclose(hFile);
+
+    memcpy(bbox, fileHeader.bounding_box, 6 * sizeof(float));
+    header = listHeader;
+    return particles;
+  } else {
+    char buf[1024];
+    sprintf(buf, "Error: could not open MMPLD file: %s\n", filename);
+    throw std::runtime_error(buf);
+  }
+
+  return std::vector<uint8_t>();
+}
+// ############
+
 
 int main(int argc, char **argv) {
   std::string volumeFile, dtype;
