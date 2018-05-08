@@ -18,7 +18,7 @@ ospray_disable_compiler_warnings()
 
 include_directories(${CMAKE_SOURCE_DIR}/apps/common
                     ${CMAKE_SOURCE_DIR}/apps/exampleViewer
-                    ${GLFW_INCLUDE_DIRS})
+                    ${GLFW_INCLUDE_DIR})
 
 ospray_create_application(ospDistribViewerDemo
   ospDistribViewerDemo.cpp
