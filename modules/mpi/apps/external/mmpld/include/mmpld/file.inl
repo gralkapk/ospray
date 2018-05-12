@@ -99,7 +99,7 @@ template<class F, class C>
 std::vector<std::uint8_t> mmpld::file<F, C>::read_particles(
         list_header& header) {
     this->read_particles(false, header, nullptr, 0);
-    auto size = mmpld::get_size(header);
+    auto size = mmpld::get_size<mmpld::list_header const&>(header);
 
     std::vector<std::uint8_t> retval(size);
     this->read_particles(header, retval.data(), size);

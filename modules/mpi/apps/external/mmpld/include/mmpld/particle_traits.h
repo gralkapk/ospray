@@ -59,7 +59,7 @@ namespace mmpld {
         static inline const void *advance(const void *data) {
             auto retval = static_cast<const std::uint8_t *>(data);
             retval += particle_traits::stride();
-            return static_cast<void *>(retval);
+            return static_cast<void const*>(retval);
         }
 
         /// <summary>

@@ -178,7 +178,8 @@ namespace detail {
 #if defined(_WIN32)
             return ::_telli64(file);
 #else /* defined(_WIN32) */
-            return ::tell(file);
+            throw std::runtime_error("MMPLD IO ERROR: Invalid type int for filehandle");
+            return ::lseek(file, 0, SEEK_CUR); //< TODO possible hazard
 #endif /* defined(_WIN32) */
         }
     };
@@ -196,7 +197,7 @@ namespace detail {
                 throw std::system_error(errno, std::system_category());
             }
 #else /* defined(_WIN32) */
-            if ((file = ::open(path, O_BINARY | O_RDONLY)) != 0) {
+            if ((file = ::open(path, O_RDONLY)) != 0) {
                 throw std::system_error(errno, std::system_category());
             }
 #endif /* defined(_WIN32) */

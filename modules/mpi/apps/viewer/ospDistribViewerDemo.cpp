@@ -37,6 +37,9 @@
 #include "gensv/generateSciVis.h"
 #include "arcball.h"
 
+#include <chrono>
+#include <thread>
+
 // mmpld
 #include "mmpld.h"
 
@@ -154,8 +157,13 @@ void charCallback(GLFWwindow *, unsigned int c) {
 }
 
 
+typedef struct _mmpld_obj {
+  OSPGeometry geo;
+  box3f region;
+} mmpld_obj;
+
 // MMPLD reader
-std::vector<uint8_t> readMMPLDFile(char const* filename, float bbox[6], mmpld::list_header& header) {
+OSPGeometry readMMPLDFile(char const* filename, box3f& bbox) {
   auto hFile = fopen(filename, "rb");
 
   if (hFile != nullptr) {
@@ -182,7 +190,9 @@ std::vector<uint8_t> readMMPLDFile(char const* filename, float bbox[6], mmpld::l
     // get jumppoint to first frame
     auto const offset = seekTable[0];
 
-    if (!fseek(hFile, offset, SEEK_SET)) {
+    std::cout << "Offset of first frame " << offset << std::endl;
+
+    if (fseek(hFile, offset, SEEK_SET)) {
       fclose(hFile);
       char buf[1024];
       sprintf(buf, "Error: Failed to jump to first frame in MMPLD file: %s\n", filename);
@@ -206,29 +216,63 @@ std::vector<uint8_t> readMMPLDFile(char const* filename, float bbox[6], mmpld::l
 
     auto ptr = particles.data();
 
+    std::cout << "Info: Start reading" << std::endl;
+
     while (rem > 0) {
       auto const cnt = fread(ptr, 1, rem, hFile);
       ptr += cnt;
       rem -= cnt;
     }
 
+    std::cout << "Info: Completed reading" << std::endl;
+
     fclose(hFile);
 
-    memcpy(bbox, fileHeader.bounding_box, 6 * sizeof(float));
-    header = listHeader;
-    return particles;
+    if (listHeader.vertex_type == mmpld::vertex_type::float_xyzr) {
+      std::cout << "Info: Variable radius is currently not supported for MMPLD files" << std::endl;
+    }
+
+    std::cout << "Info: Creating OSPRay geometry" << std::endl;
+
+    auto const stride = mmpld::get_stride<size_t>(listHeader);
+
+    std::cout << "Info: Stride is " << stride << std::endl;
+
+    auto const geo = ospNewGeometry("spheres");
+    if (geo == nullptr) {
+      std::cerr << "Error: Failed to create geomety" << std::endl;
+    }
+
+    std::cout << "Info: Creating vertex data for " << listHeader.particles << " particles" << std::endl;
+
+    std::cout << "Info: Data contains " << particles.size() << " bytes; Geometry will have "<< listHeader.particles*stride << " bytes" << std::endl;
+
+    ospSet1i(geo, "bytes_per_sphere", stride);
+    ospSet1f(geo, "radius", listHeader.radius);
+    std::cout << "ping" << std::endl;
+    auto const vertexData = ospNewData(listHeader.particles*stride, OSP_CHAR, particles.data());
+    ospCommit(vertexData);
+    ospSetData(geo, "spheres", vertexData);
+
+    vec3f lower{fileHeader.bounding_box[0], fileHeader.bounding_box[1], fileHeader.bounding_box[2]};
+    vec3f upper{fileHeader.bounding_box[3], fileHeader.bounding_box[4], fileHeader.bounding_box[5]};
+    bbox = box3f{lower, upper};
+
+    std::cout << "Info: Finished creating OSPRay geometry" << std::endl;
+    return geo;
   } else {
     char buf[1024];
     sprintf(buf, "Error: could not open MMPLD file: %s\n", filename);
     throw std::runtime_error(buf);
   }
-
-  return std::vector<uint8_t>();
 }
 // ############
 
 
 int main(int argc, char **argv) {
+  //using namespace std::chrono_literals;
+
+
   std::string volumeFile, dtype;
   vec3i dimensions = vec3i(-1);
   vec2f valueRange = vec2f(-1);
@@ -240,6 +284,13 @@ int main(int argc, char **argv) {
   float sphereRadius = 0.005;
   bool transparentSpheres = false;
   int aoSamples = 0;
+
+  // mmpld variables
+  bool readMMPLD = false;
+  bool singleMMPLDFile = false;
+  std::string mmpldPath;
+  std::vector<mmpld_obj> mmpldObjs;
+  //
 
   for (int i = 0; i < argc; ++i) {
     std::string arg = argv[i];
@@ -270,7 +321,15 @@ int main(int argc, char **argv) {
       transparentSpheres = true;
     } else if (arg == "-ao") {
       aoSamples = std::stoi(argv[++i]);
+    // mmpld arguments
+    } else if (arg == "-mmpld") {
+      readMMPLD = true;
+    } else if (arg == "-singleMMPLD") {
+      singleMMPLDFile = true;
+    } else if (arg == "-mmpldPath") {
+      mmpldPath = argv[++i];
     }
+    // end mmpld arguments
   }
   if (!volumeFile.empty()) {
     if (dtype.empty()) {
@@ -290,6 +349,8 @@ int main(int argc, char **argv) {
       return 1;
     }
   }
+
+  std::cout << "Arguments parsed" << std::endl;
 
   ospLoadModule("mpi");
   // The application can be responsible for initializing and finalizing MPI,
@@ -329,6 +390,29 @@ int main(int argc, char **argv) {
     // Pick a nice sphere radius for a consisten voxel size to
     // sphere size ratio
     sphereRadius *= dimensions.x;
+  } else if (readMMPLD) {
+    if (mmpldPath.empty()) {
+      std::cerr << "Error: -mmpldPath not set\n";
+      return 1;
+    }
+    // handle mmpld files
+    if (singleMMPLDFile) {
+      // path is a file
+      box3f bbox;
+      std::cout << "Opening file " << mmpldPath.c_str() << std::endl;
+      OSPGeometry data = nullptr;
+      try {
+        data = readMMPLDFile(mmpldPath.c_str(), bbox);
+      } catch (std::runtime_error e) {
+        std::cout << "Failed to read mmpld: " << e.what() << std::endl;
+        return 1;
+      }
+      mmpldObjs.push_back(mmpld_obj{data, bbox});
+      worldBounds = bbox;
+    } else {
+      // path is directory
+        std::cout << "Opening directory" << std::endl;
+    }
   } else {
     volumes = gensv::makeVolumes(rank * nlocalBricks, nlocalBricks,
                                  worldSize * nlocalBricks);
@@ -342,19 +426,35 @@ int main(int argc, char **argv) {
   }
 
   std::vector<box3f> regions, ghostRegions;
-  for (auto &v : volumes) {
-    v.volume.commit();
-    model.addVolume(v.volume);
 
-    ghostRegions.push_back(worldBounds);
-    regions.push_back(v.bounds);
-  }
-  // All ranks generate the same sphere data to mimic rendering a distributed
-  // shared dataset
-  if (nSpheres != 0) {
-    auto spheres = gensv::makeSpheres(worldBounds, nSpheres,
-                                      sphereRadius, transparentSpheres);
-    model.addGeometry(spheres);
+  std::cout << "Commiting data" << std::endl;
+  if (!readMMPLD) {
+    std::cout << "Commiting volume data" << std::endl;
+    for (auto &v : volumes) {
+      v.volume.commit();
+      model.addVolume(v.volume);
+
+      ghostRegions.push_back(worldBounds);
+      regions.push_back(v.bounds);
+    }
+    // All ranks generate the same sphere data to mimic rendering a distributed
+    // shared dataset
+    if (nSpheres != 0) {
+      auto spheres = gensv::makeSpheres(worldBounds, nSpheres,
+        sphereRadius, transparentSpheres);
+      model.addGeometry(spheres);
+    }
+  } else {
+    std::cout << "Commiting MMPLD data" << std::endl;
+    for (auto& g : mmpldObjs) {
+      ghostRegions.push_back(worldBounds);
+      regions.push_back(g.region);
+
+      ospCommit(g.geo);
+      model.addGeometry(g.geo);
+
+      std::cout << "Geometry added" << std::endl;
+    }
   }
 
   Arcball arcballCamera(worldBounds);

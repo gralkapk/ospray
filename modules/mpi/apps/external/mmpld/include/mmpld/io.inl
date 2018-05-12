@@ -42,19 +42,19 @@ mmpld::detail::basic_io_traits<int>::read(file_type& file, void *dst,
     while (rem > 0) {
 #if defined(_WIN32)
         assert(rem < (std::numeric_limits<unsigned int>::max)());
-        auto read = ::_read(file, ptr, static_cast<unsigned int>(rem));
+        auto r = ::_read(file, ptr, static_cast<unsigned int>(rem));
 #else /* defined(_WIN32) */
-        auto cnt = ::read(file, ptr, rem);
+        auto r = ::read(file, ptr, rem);
 #endif /* defined(_WIN32) */
-        if (read == -1) {
+        if (r == -1) {
             throw std::system_error(errno, std::system_category());
         }
-        if (read == 0) {
+        if (r == 0) {
             // EOF
             break;
         }
-        ptr += read;
-        rem -= read;
+        ptr += r;
+        rem -= r;
     }
 
     return (cnt - rem);

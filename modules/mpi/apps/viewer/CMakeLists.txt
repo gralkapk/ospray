@@ -19,7 +19,7 @@ ospray_disable_compiler_warnings()
 include_directories(${CMAKE_SOURCE_DIR}/apps/common
                     ${CMAKE_SOURCE_DIR}/apps/exampleViewer
                     ${CMAKE_CURRENT_SOURCE_DIR}/../external/mmpld/include
-                    ${GLFW_INCLUDE_DIR})
+                    ${GLFW_INCLUDE_DIRS})
 
 ospray_create_application(ospDistribViewerDemo
   ospDistribViewerDemo.cpp
